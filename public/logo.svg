@@ -1,0 +1,17 @@
+<svg viewBox="0 0 220 75" xmlns="http://www.w3.org/2000/svg" fill="none">
+  <!-- Apple shape -->
+  <g transform="translate(4,4)">
+    <!-- Leaf -->
+    <path d="M33 7 C34 3 38 1 40 4 C38 7 34 9 33 7Z" fill="#CC1717"/>
+    <!-- Apple body left -->
+    <path d="M21 22 C19 15 24 11 29 13 C29 13 30 14 33 14 C33 10 35 7 35 7 C35 7 35 11 37 14 C40 14 41 13 41 13 C46 11 51 15 49 22 C47 30 41 42 35 43 C29 42 23 30 21 22Z" fill="#CC1717"/>
+    <!-- Highlight/bite -->
+    <path d="M37 14 C41 14 47 16 48 21 C47 15 43 12 39 13 C38 13 37 14 37 14Z" fill="#B01010" opacity="0.4"/>
+  </g>
+  <!-- BANCO -->
+  <text x="62" y="26" font-family="Arial Black, Arial" font-weight="900" font-size="17" fill="#CC1717" letter-spacing="1">BANCO</text>
+  <!-- DE ALIMENTOS DE -->
+  <text x="62" y="40" font-family="Arial, sans-serif" font-weight="400" font-size="9.5" fill="#CC1717" letter-spacing="0.5">DE ALIMENTOS DE</text>
+  <!-- BOLIVIA -->
+  <text x="62" y="57" font-family="Arial Black, Arial" font-weight="900" font-size="17" fill="#CC1717" letter-spacing="1">BOLIVIA</text>
+</svg>
