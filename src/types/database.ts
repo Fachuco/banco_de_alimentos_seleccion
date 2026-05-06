@@ -122,22 +122,22 @@ export interface Database {
       detalle_donacion: {
         Row: {
           id: number;
-          donacion_id: number | null;
-          alimento_id: number | null;
+          donacion_id: number;
+          alimento_id: number;
           cantidad: number;
           fecha_vencimiento: string | null;
           estado_id: number | null;
         };
         Insert: {
-          donacion_id?: number | null;
-          alimento_id?: number | null;
+          donacion_id: number;
+          alimento_id: number;
           cantidad: number;
           fecha_vencimiento?: string | null;
           estado_id?: number | null;
         };
         Update: {
-          donacion_id?: number | null;
-          alimento_id?: number | null;
+          donacion_id?: number;
+          alimento_id?: number;
           cantidad?: number;
           fecha_vencimiento?: string | null;
           estado_id?: number | null;

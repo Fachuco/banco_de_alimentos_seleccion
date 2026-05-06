@@ -26,6 +26,11 @@ type Alimento = Database["public"]["Tables"]["alimentos"]["Row"];
 type Estado = Database["public"]["Tables"]["estados"]["Row"];
 type UnidadMedida = Database["public"]["Tables"]["unidades_medida"]["Row"];
 
+// Tipo extendido para alimentos que incluyen la relación con unidades_medida
+interface AlimentoConUnidad extends Alimento {
+  unidades_medida?: { nombre: string } | null;
+}
+
 interface DetalleDonacion { 
   alimento_id: number; 
   cantidad: number;
@@ -186,7 +191,7 @@ function DonacionesContent() {
   const filtroValor = searchParams.get("valor");
 
   const [donantes, setDonantes] = useState<Donante[]>([]);
-  const [alimentos, setAlimentos] = useState<Alimento[]>([]);
+  const [alimentos, setAlimentos] = useState<AlimentoConUnidad[]>([]);
   const [estados, setEstados] = useState<Estado[]>([]);
   const [donanteId, setDonanteId] = useState("");
   const [detalles, setDetalles] = useState<DetalleDonacion[]>([{ alimento_id: 0, cantidad: 1, fecha_vencimiento: null, estado_id: null }]);
@@ -218,7 +223,7 @@ function DonacionesContent() {
         .order("id", { ascending: false }),
     ]);
     setDonantes(don ?? []);
-    setAlimentos((ali as unknown as Alimento[]) ?? []);
+    setAlimentos((ali as unknown as AlimentoConUnidad[]) ?? []);
     setEstados(est ?? []);
     setDonaciones((donac as unknown as DonacionConDetalle[]) ?? []);
     setLoading(false);
