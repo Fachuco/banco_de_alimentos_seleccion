@@ -115,14 +115,14 @@ function AlimentosContent() {
 
   /* --- filtrado --- */
   const hoy = new Date().toISOString().slice(0, 10);
-  const en30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+  const en7 = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
 
   let alimentosFiltrados = alimentos;
 
   /* filtro desde URL */
   if (filtroUrl === "por_vencer") {
     alimentosFiltrados = alimentosFiltrados.filter(
-      (a) => a.fecha_vencimiento && a.fecha_vencimiento >= hoy && a.fecha_vencimiento <= en30
+      (a) => a.fecha_vencimiento && a.fecha_vencimiento >= hoy && a.fecha_vencimiento <= en7
     );
   } else if (filtroUrl === "estado" && filtroId) {
     alimentosFiltrados = alimentosFiltrados.filter((a) => a.estado_id === filtroId);
@@ -147,7 +147,7 @@ function AlimentosContent() {
   /* etiqueta del filtro activo */
   const filtroActivo =
     filtroUrl === "por_vencer"
-      ? "Próximos a vencer (30 días)"
+      ? "Próximos a vencer (7 días)"
       : filtroUrl === "estado" && filtroId
       ? `Estado: ${estados.find((e) => e.id === filtroId)?.nombre ?? filtroId}`
       : filtroUrl === "categoria" && filtroId
@@ -371,9 +371,7 @@ function AlimentosContent() {
                   <TableRow>
                     <TableHead>Nombre</TableHead>
                     <TableHead>Categoría</TableHead>
-                    <TableHead>Estado</TableHead>
                     <TableHead className="text-right">Cantidad</TableHead>
-                    <TableHead>Vencimiento</TableHead>
                     <TableHead>Ingreso</TableHead>
                     <TableHead className="w-[100px] text-right">Acciones</TableHead>
                   </TableRow>
@@ -381,49 +379,17 @@ function AlimentosContent() {
                 <TableBody>
                   {alimentosFiltrados.map((a) => {
                     const cat = getNombreCategoria(a.categoria_id);
-                    const est = getNombreEstado(a.estado_id);
                     const uni = getNombreUnidad(a.unidad_medida_id);
-                    const vencido = a.fecha_vencimiento && a.fecha_vencimiento < hoy;
-                    const proximoVencer =
-                      a.fecha_vencimiento &&
-                      a.fecha_vencimiento >= hoy &&
-                      a.fecha_vencimiento <= en30;
 
                     return (
-                      <TableRow key={a.id} className={vencido ? "bg-red-50/50" : ""}>
-                        <TableCell className="font-medium">
-                          <div className="flex items-center gap-2">
-                            {a.nombre}
-                            {vencido && (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">
-                                <AlertTriangle className="h-2.5 w-2.5" /> VENCIDO
-                              </span>
-                            )}
-                            {proximoVencer && !vencido && (
-                              <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                                Por vencer
-                              </span>
-                            )}
-                          </div>
-                        </TableCell>
+                      <TableRow key={a.id}>
+                        <TableCell className="font-medium">{a.nombre}</TableCell>
                         <TableCell>
                           {cat ? <Badge variant="secondary">{cat}</Badge> : <span className="text-muted-foreground">—</span>}
-                        </TableCell>
-                        <TableCell>
-                          {est ? <Badge variant="outline">{est}</Badge> : <span className="text-muted-foreground">—</span>}
                         </TableCell>
                         <TableCell className="text-right font-mono">
                           {a.cantidad}
                           {uni && <span className="ml-1 text-xs text-muted-foreground">{uni}</span>}
-                        </TableCell>
-                        <TableCell>
-                          {a.fecha_vencimiento ? (
-                            <span className={`text-sm ${vencido ? "text-red-600 font-medium" : ""}`}>
-                              {new Date(a.fecha_vencimiento).toLocaleDateString("es", { year: "numeric", month: "short", day: "numeric" })}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {new Date(a.fecha_ingreso).toLocaleDateString("es", { year: "numeric", month: "short", day: "numeric" })}

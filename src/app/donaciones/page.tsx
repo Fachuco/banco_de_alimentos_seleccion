@@ -14,26 +14,149 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
-import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
   DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Filter, X } from "lucide-react";
+import { Filter, X, AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
 
 type Donante = Database["public"]["Tables"]["donantes"]["Row"];
 type Alimento = Database["public"]["Tables"]["alimentos"]["Row"];
 
 interface DetalleDonacion { alimento_id: number; cantidad: number }
 
-interface DonacionConDonante {
+interface DetalleConAlimento {
+  cantidad: number;
+  alimentos: {
+    nombre: string;
+    fecha_vencimiento: string | null;
+    unidad_medida_id: number | null;
+    unidades_medida: { nombre: string } | null;
+  } | null;
+}
+
+interface DonacionConDetalle {
   id: number;
   fecha_donacion: string;
   donante_id: number | null;
-  donantes: { nombre: string; id: number } | null;
+  donantes: { nombre: string } | null;
+  detalle_donacion: DetalleConAlimento[];
+}
+
+const hoy = new Date().toISOString().slice(0, 10);
+const en7 = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+
+function badgeVencimiento(fecha: string | null) {
+  if (!fecha) return null;
+  if (fecha < hoy) return { label: "Vencido", cls: "bg-red-100 text-red-700" };
+  if (fecha <= en7) return { label: "Por vencer", cls: "bg-amber-100 text-amber-700" };
+  return null;
+}
+
+function DonacionRow({ donacion }: { donacion: DonacionConDetalle }) {
+  const [abierto, setAbierto] = useState(false);
+  const tieneAlertaVenc = donacion.detalle_donacion.some((d) => {
+    const f = d.alimentos?.fecha_vencimiento ?? null;
+    return f && f <= en7;
+  });
+
+  return (
+    <>
+      <tr
+        className={`border-b cursor-pointer hover:bg-muted/30 transition-colors ${tieneAlertaVenc ? "bg-amber-50/30" : ""}`}
+        onClick={() => setAbierto((v) => !v)}
+      >
+        <td className="py-3 pl-6 pr-4 w-[80px]">
+          <Badge variant="outline">#{donacion.id}</Badge>
+        </td>
+        <td className="py-3 px-4 font-medium">{donacion.donantes?.nombre ?? "—"}</td>
+        <td className="py-3 px-4 text-muted-foreground">
+          {new Date(donacion.fecha_donacion).toLocaleDateString("es", {
+            year: "numeric", month: "long", day: "numeric",
+          })}
+        </td>
+        <td className="py-3 px-4">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">
+              {donacion.detalle_donacion.length} producto{donacion.detalle_donacion.length !== 1 ? "s" : ""}
+            </span>
+            {tieneAlertaVenc && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                <AlertTriangle className="h-2.5 w-2.5" /> Alerta venc.
+              </span>
+            )}
+          </div>
+        </td>
+        <td className="py-3 pl-4 pr-6 text-muted-foreground">
+          {abierto
+            ? <ChevronDown className="h-4 w-4" />
+            : <ChevronRight className="h-4 w-4" />}
+        </td>
+      </tr>
+
+      {abierto && (
+        <tr className="border-b bg-muted/20">
+          <td colSpan={5} className="pb-3 pt-0">
+            <div className="mx-6 mt-2 rounded-lg border bg-white overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-muted/40 text-xs text-muted-foreground uppercase tracking-wide">
+                    <th className="py-2 pl-4 pr-3 text-left font-medium">Alimento</th>
+                    <th className="py-2 px-3 text-right font-medium">Cantidad</th>
+                    <th className="py-2 pl-3 pr-4 text-left font-medium">Vencimiento</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {donacion.detalle_donacion.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="py-3 pl-4 text-muted-foreground text-xs">Sin detalle registrado.</td>
+                    </tr>
+                  ) : (
+                    donacion.detalle_donacion.map((d, i) => {
+                      const alerta = badgeVencimiento(d.alimentos?.fecha_vencimiento ?? null);
+                      return (
+                        <tr key={i} className={`border-t ${alerta?.cls.includes("red") ? "bg-red-50/40" : alerta ? "bg-amber-50/40" : ""}`}>
+                          <td className="py-2.5 pl-4 pr-3 font-medium text-foreground">
+                            {d.alimentos?.nombre ?? "—"}
+                          </td>
+                          <td className="py-2.5 px-3 text-right text-muted-foreground font-mono">
+                            {d.cantidad}
+                            {d.alimentos?.unidades_medida?.nombre && (
+                              <span className="ml-1 text-xs">{d.alimentos.unidades_medida.nombre}</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 pl-3 pr-4">
+                            {d.alimentos?.fecha_vencimiento ? (
+                              <div className="flex items-center gap-2">
+                                <span className={alerta?.cls.includes("red") ? "text-red-600 font-medium" : alerta ? "text-amber-600 font-medium" : "text-muted-foreground"}>
+                                  {new Date(d.alimentos.fecha_vencimiento).toLocaleDateString("es", {
+                                    day: "numeric", month: "short", year: "numeric",
+                                  })}
+                                </span>
+                                {alerta && (
+                                  <span className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ${alerta.cls}`}>
+                                    <AlertTriangle className="h-2.5 w-2.5" />
+                                    {alerta.label}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
 }
 
 function DonacionesContent() {
@@ -41,14 +164,14 @@ function DonacionesContent() {
   const searchParams = useSearchParams();
   const filtroUrl = searchParams.get("filtro");
   const filtroId = searchParams.get("id") ? Number(searchParams.get("id")) : null;
-  const filtroFecha = searchParams.get("fecha"); // "YYYY-MM"
+  const filtroFecha = searchParams.get("fecha");
 
   const [donantes, setDonantes] = useState<Donante[]>([]);
   const [alimentos, setAlimentos] = useState<Alimento[]>([]);
   const [donanteId, setDonanteId] = useState("");
   const [detalles, setDetalles] = useState<DetalleDonacion[]>([{ alimento_id: 0, cantidad: 1 }]);
   const [loading, setLoading] = useState(true);
-  const [donaciones, setDonaciones] = useState<DonacionConDonante[]>([]);
+  const [donaciones, setDonaciones] = useState<DonacionConDetalle[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
 
   async function cargarDatos() {
@@ -57,12 +180,21 @@ function DonacionesContent() {
       supabase.from("alimentos").select("*").order("nombre"),
       supabase
         .from("donaciones")
-        .select("id, fecha_donacion, donante_id, donantes(nombre, id)")
+        .select(`
+          id,
+          fecha_donacion,
+          donante_id,
+          donantes(nombre),
+          detalle_donacion(
+            cantidad,
+            alimentos(nombre, fecha_vencimiento, unidad_medida_id, unidades_medida(nombre))
+          )
+        `)
         .order("id", { ascending: false }),
     ]);
     setDonantes(don ?? []);
     setAlimentos(ali ?? []);
-    setDonaciones((donac as DonacionConDonante[]) ?? []);
+    setDonaciones((donac as unknown as DonacionConDetalle[]) ?? []);
     setLoading(false);
   }
 
@@ -106,22 +238,14 @@ function DonacionesContent() {
     donacionesFiltradas = donacionesFiltradas.filter((d) => d.donante_id === filtroId);
   } else if (filtroUrl === "mes") {
     if (filtroFecha) {
-      /* filtro de mes específico desde gráfica */
-      donacionesFiltradas = donacionesFiltradas.filter((d) =>
-        d.fecha_donacion.startsWith(filtroFecha)
-      );
+      donacionesFiltradas = donacionesFiltradas.filter((d) => d.fecha_donacion.startsWith(filtroFecha));
     } else {
-      /* mes actual */
       const inicioMes = new Date();
-      inicioMes.setDate(1);
-      inicioMes.setHours(0, 0, 0, 0);
-      donacionesFiltradas = donacionesFiltradas.filter(
-        (d) => new Date(d.fecha_donacion) >= inicioMes
-      );
+      inicioMes.setDate(1); inicioMes.setHours(0, 0, 0, 0);
+      donacionesFiltradas = donacionesFiltradas.filter((d) => new Date(d.fecha_donacion) >= inicioMes);
     }
   }
 
-  /* etiqueta del filtro activo */
   const filtroActivo =
     filtroUrl === "donante" && filtroId
       ? `Donante: ${donantes.find((d) => d.id === filtroId)?.nombre ?? filtroId}`
@@ -216,7 +340,6 @@ function DonacionesContent() {
 
       <Separator />
 
-      {/* Banner filtro activo */}
       {filtroActivo && (
         <div className="flex items-center justify-between rounded-lg bg-primary/8 border border-primary/20 px-4 py-2.5">
           <div className="flex items-center gap-2 text-sm text-primary font-medium">
@@ -240,8 +363,7 @@ function DonacionesContent() {
           <CardTitle className="text-base">Historial de Donaciones</CardTitle>
           <CardDescription>
             {donacionesFiltradas.length} de {donaciones.length} donación
-            {donaciones.length !== 1 && "es"} registrada
-            {donaciones.length !== 1 && "s"}
+            {donaciones.length !== 1 && "es"} — clic en una fila para ver los alimentos donados
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
@@ -255,34 +377,28 @@ function DonacionesContent() {
                 {filtroActivo ? "Sin resultados" : "No hay donaciones"}
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
-                {filtroActivo
-                  ? "No hay donaciones con este filtro."
-                  : "Registra la primera donación para comenzar."}
+                {filtroActivo ? "No hay donaciones con este filtro." : "Registra la primera donación para comenzar."}
               </p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[80px]">N°</TableHead>
-                  <TableHead>Donante</TableHead>
-                  <TableHead>Fecha</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {donacionesFiltradas.map((d) => (
-                  <TableRow key={d.id}>
-                    <TableCell><Badge variant="outline">#{d.id}</Badge></TableCell>
-                    <TableCell className="font-medium">{d.donantes?.nombre ?? "—"}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {new Date(d.fecha_donacion).toLocaleDateString("es", {
-                        year: "numeric", month: "long", day: "numeric",
-                      })}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/30 text-xs text-muted-foreground uppercase tracking-wide">
+                    <th className="py-2.5 pl-6 pr-4 text-left font-medium w-[80px]">N°</th>
+                    <th className="py-2.5 px-4 text-left font-medium">Donante</th>
+                    <th className="py-2.5 px-4 text-left font-medium">Fecha</th>
+                    <th className="py-2.5 px-4 text-left font-medium">Alimentos</th>
+                    <th className="py-2.5 pl-4 pr-6 w-8" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {donacionesFiltradas.map((d) => (
+                    <DonacionRow key={d.id} donacion={d} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </CardContent>
       </Card>

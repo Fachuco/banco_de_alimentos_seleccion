@@ -44,7 +44,6 @@ interface KPI {
 interface MesData { mes: string; donaciones: number; fecha: string }
 interface CategoriaData { id: number; nombre: string; value: number }
 interface DonanteData { id: number; nombre: string; donaciones: number }
-interface EstadoData { id: number; nombre: string; value: number }
 interface VencimientoRow {
   nombre: string;
   fecha_vencimiento: string;
@@ -105,7 +104,6 @@ export default function Dashboard() {
   const [meses, setMeses] = useState<MesData[]>([]);
   const [categorias, setCategorias] = useState<CategoriaData[]>([]);
   const [topDonantes, setTopDonantes] = useState<DonanteData[]>([]);
-  const [estados, setEstados] = useState<EstadoData[]>([]);
   const [vencimientos, setVencimientos] = useState<VencimientoRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -113,7 +111,7 @@ export default function Dashboard() {
     async function cargar() {
       const hoy = new Date();
       const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10);
-      const en30dias = new Date(hoy.getTime() + 30 * 86400000).toISOString().slice(0, 10);
+      const en30dias = new Date(hoy.getTime() + 7 * 86400000).toISOString().slice(0, 10);
       const hace6meses = new Date(hoy.getFullYear(), hoy.getMonth() - 5, 1).toISOString().slice(0, 10);
 
       const [
@@ -124,7 +122,6 @@ export default function Dashboard() {
         { data: donacionesData },
         { data: alimentosCat },
         { data: donacionesDon },
-        { data: alimentosEst },
         { data: vencData },
       ] = await Promise.all([
         supabase.from("alimentos").select("id", { count: "exact", head: true }),
@@ -137,7 +134,6 @@ export default function Dashboard() {
         supabase.from("donaciones").select("fecha_donacion").gte("fecha_donacion", hace6meses).order("fecha_donacion"),
         supabase.from("alimentos").select("categoria_id, categorias(nombre)").not("categoria_id", "is", null),
         supabase.from("donaciones").select("donante_id, donantes(nombre, id)").not("donante_id", "is", null),
-        supabase.from("alimentos").select("estado_id, estados(nombre, id)").not("estado_id", "is", null),
         supabase.from("alimentos").select("nombre, fecha_vencimiento, cantidad")
           .not("fecha_vencimiento", "is", null)
           .gte("fecha_vencimiento", hoy.toISOString().slice(0, 10))
@@ -185,17 +181,6 @@ export default function Dashboard() {
         .sort((a, b) => b.donaciones - a.donaciones).slice(0, 6));
 
 
-      const estMap: Record<number, { nombre: string; count: number }> = {};
-      (alimentosEst ?? []).forEach((a) => {
-        const est = a.estados as { nombre: string; id: number } | null;
-        if (a.estado_id && est) {
-          estMap[a.estado_id] = estMap[a.estado_id] ?? { nombre: est.nombre, count: 0 };
-          estMap[a.estado_id].count++;
-        }
-      });
-      setEstados(Object.entries(estMap)
-        .map(([id, { nombre, count }]) => ({ id: Number(id), nombre, value: count })));
-
       setVencimientos((vencData ?? []).map((v) => ({
         nombre: v.nombre,
         fecha_vencimiento: v.fecha_vencimiento!,
@@ -237,7 +222,7 @@ export default function Dashboard() {
       bg: "bg-primary/8",
     },
     {
-      titulo: "Por vencer (30 días)",
+      titulo: "Por vencer (7 días)",
       valor: kpi.porVencer,
       desc: "alimentos próximos a vencer",
       icon: AlertTriangle,
@@ -394,9 +379,9 @@ export default function Dashboard() {
       </div>
 
       {/* Charts row 2 */}
-      <div className="grid gap-4 lg:grid-cols-5">
+      <div className="grid gap-4">
         {/* Top donantes */}
-        <Card className="lg:col-span-3">
+        <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">Top donantes</CardTitle>
             <HintLabel>Clic en una barra para ver las donaciones de ese donante</HintLabel>
@@ -425,62 +410,6 @@ export default function Dashboard() {
             )}
           </CardContent>
         </Card>
-
-        {/* Alimentos por estado */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Alimentos por estado</CardTitle>
-            <HintLabel>Clic en un segmento para filtrar alimentos</HintLabel>
-          </CardHeader>
-          <CardContent>
-            {estados.length === 0 ? <EmptyChart /> : (
-              <div className="flex flex-col items-center gap-3">
-                <ResponsiveContainer width="100%" height={160}>
-                  <PieChart>
-                    <Pie
-                      data={estados}
-                      dataKey="value" nameKey="nombre"
-                      cx="50%" cy="50%"
-                      innerRadius={45} outerRadius={75}
-                      paddingAngle={2}
-                      onClick={(data: EstadoData) => router.push(`/alimentos?filtro=estado&id=${data.id}`)}
-                      style={{ cursor: "pointer" }}
-                    >
-                      {estados.map((_, i) => (
-                        <Cell key={i} fill={COLORS[i % COLORS.length]} stroke="none" />
-                      ))}
-                    </Pie>
-                    <Tooltip content={<CustomTooltip />} />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="w-full space-y-1.5">
-                  {estados.slice(0, 4).map((e, i) => {
-                    const total = estados.reduce((s, x) => s + x.value, 0);
-                    const pct = total > 0 ? Math.round((e.value / total) * 100) : 0;
-                    return (
-                      <button
-                        key={i}
-                        className="w-full space-y-0.5 text-left hover:bg-muted/50 rounded px-1 py-0.5 transition-colors cursor-pointer"
-                        onClick={() => router.push(`/alimentos?filtro=estado&id=${e.id}`)}
-                      >
-                        <div className="flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-2">
-                            <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ background: COLORS[i % COLORS.length] }} />
-                            <span className="text-muted-foreground truncate max-w-[90px]">{e.nombre}</span>
-                          </div>
-                          <span className="font-semibold">{pct}%</span>
-                        </div>
-                        <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
-                          <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: COLORS[i % COLORS.length] }} />
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
       </div>
 
       {/* Próximos a vencer */}
@@ -491,7 +420,7 @@ export default function Dashboard() {
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4 text-amber-600" />
                 <CardTitle className="text-sm font-semibold text-amber-800">
-                  Alimentos próximos a vencer (30 días)
+                  Alimentos próximos a vencer (7 días)
                 </CardTitle>
               </div>
               <Link
