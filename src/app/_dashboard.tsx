@@ -129,19 +129,17 @@ export default function Dashboard() {
         supabase.from("alimentos").select("id", { count: "exact", head: true }),
         supabase.from("donantes").select("id", { count: "exact", head: true }),
         supabase.from("donaciones").select("id", { count: "exact", head: true }).gte("fecha_donacion", inicioMes),
-        supabase.from("alimentos").select("id", { count: "exact", head: true })
-          .not("fecha_vencimiento", "is", null)
+        supabase.from("detalle_donacion").select("id", { count: "exact", head: true })
           .gte("fecha_vencimiento", hoy.toISOString().slice(0, 10))
           .lte("fecha_vencimiento", en30dias),
         supabase.from("donaciones").select("fecha_donacion").gte("fecha_donacion", hace6meses).order("fecha_donacion"),
         supabase.from("alimentos").select("categoria_id, categorias(nombre)").not("categoria_id", "is", null),
         supabase.from("donaciones").select("donante_id, donantes(nombre, id)").not("donante_id", "is", null),
-        supabase.from("alimentos").select("nombre, fecha_vencimiento, cantidad")
-          .not("fecha_vencimiento", "is", null)
+        supabase.from("detalle_donacion").select("fecha_vencimiento, cantidad, alimentos(nombre)")
           .gte("fecha_vencimiento", hoy.toISOString().slice(0, 10))
           .lte("fecha_vencimiento", en30dias)
           .order("fecha_vencimiento").limit(8),
-        supabase.from("detalle_donacion").select("alimentos(fecha_vencimiento)"),
+        supabase.from("detalle_donacion").select("alimentos(nombre), fecha_vencimiento"),
       ]);
 
       setKpi({ alimentos: cAlimentos ?? 0, donantes: cDonantes ?? 0, donacionesMes: cDonMes ?? 0, porVencer: cVencer ?? 0 });
@@ -181,7 +179,7 @@ export default function Dashboard() {
         .sort((a, b) => b.donaciones - a.donaciones).slice(0, 6));
 
       setVencimientos((vencData ?? []).map((v) => ({
-        nombre: v.nombre,
+        nombre: (v.alimentos as any)?.nombre ?? "Sin nombre",
         fecha_vencimiento: v.fecha_vencimiento!,
         cantidad: v.cantidad,
         diasRestantes: diasHasta(v.fecha_vencimiento!),
@@ -191,8 +189,7 @@ export default function Dashboard() {
       const en7Str = en30dias;
       let cVencido = 0, cPorVencer = 0, cBueno = 0;
       (estadoRaw ?? []).forEach((row) => {
-        const ali = row.alimentos as { fecha_vencimiento: string | null } | null;
-        const f = ali?.fecha_vencimiento ?? null;
+        const f = (row as any).fecha_vencimiento ?? null;
         if (!f || f > en7Str) cBueno++;
         else if (f < hoyStr) cVencido++;
         else cPorVencer++;
