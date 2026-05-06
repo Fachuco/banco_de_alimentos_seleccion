@@ -297,7 +297,7 @@ function DonacionesContent() {
   } else if (filtroUrl === "estado" && filtroValor) {
     donacionesFiltradas = donacionesFiltradas.filter((d) =>
       d.detalle_donacion.some((det) => {
-        const f = det.alimentos?.fecha_vencimiento ?? null;
+        const f = det.fecha_vencimiento ?? null;
         if (filtroValor === "vencido")    return f !== null && f < hoy;
         if (filtroValor === "por_vencer") return f !== null && f >= hoy && f <= en7;
         if (filtroValor === "bueno")      return f === null || f > en7;
