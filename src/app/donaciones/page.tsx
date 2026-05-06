@@ -165,6 +165,7 @@ function DonacionesContent() {
   const filtroUrl = searchParams.get("filtro");
   const filtroId = searchParams.get("id") ? Number(searchParams.get("id")) : null;
   const filtroFecha = searchParams.get("fecha");
+  const filtroValor = searchParams.get("valor");
 
   const [donantes, setDonantes] = useState<Donante[]>([]);
   const [alimentos, setAlimentos] = useState<Alimento[]>([]);
@@ -244,7 +245,21 @@ function DonacionesContent() {
       inicioMes.setDate(1); inicioMes.setHours(0, 0, 0, 0);
       donacionesFiltradas = donacionesFiltradas.filter((d) => new Date(d.fecha_donacion) >= inicioMes);
     }
+  } else if (filtroUrl === "estado" && filtroValor) {
+    donacionesFiltradas = donacionesFiltradas.filter((d) =>
+      d.detalle_donacion.some((det) => {
+        const f = det.alimentos?.fecha_vencimiento ?? null;
+        if (filtroValor === "vencido")    return f !== null && f < hoy;
+        if (filtroValor === "por_vencer") return f !== null && f >= hoy && f <= en7;
+        if (filtroValor === "bueno")      return f === null || f > en7;
+        return false;
+      })
+    );
   }
+
+  const estadoLabel: Record<string, string> = {
+    vencido: "Vencido", por_vencer: "Por vencer", bueno: "Bueno",
+  };
 
   const filtroActivo =
     filtroUrl === "donante" && filtroId
@@ -253,6 +268,8 @@ function DonacionesContent() {
       ? `Mes: ${new Date(filtroFecha + "-01").toLocaleDateString("es", { month: "long", year: "numeric" })}`
       : filtroUrl === "mes"
       ? "Donaciones de este mes"
+      : filtroUrl === "estado" && filtroValor
+      ? `Estado del producto: ${estadoLabel[filtroValor] ?? filtroValor}`
       : null;
 
   return (

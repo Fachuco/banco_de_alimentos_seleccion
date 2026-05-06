@@ -50,6 +50,7 @@ interface VencimientoRow {
   cantidad: number;
   diasRestantes: number;
 }
+interface EstadoData { nombre: string; value: number; color: string; valor: string }
 
 
 const COLORS = ["#CC1717", "#E05C1F", "#8B1A1A", "#D97706", "#92400E"];
@@ -104,6 +105,7 @@ export default function Dashboard() {
   const [meses, setMeses] = useState<MesData[]>([]);
   const [categorias, setCategorias] = useState<CategoriaData[]>([]);
   const [topDonantes, setTopDonantes] = useState<DonanteData[]>([]);
+  const [estados, setEstados] = useState<EstadoData[]>([]);
   const [vencimientos, setVencimientos] = useState<VencimientoRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -123,6 +125,7 @@ export default function Dashboard() {
         { data: alimentosCat },
         { data: donacionesDon },
         { data: vencData },
+        { data: estadoRaw },
       ] = await Promise.all([
         supabase.from("alimentos").select("id", { count: "exact", head: true }),
         supabase.from("donantes").select("id", { count: "exact", head: true }),
@@ -139,6 +142,7 @@ export default function Dashboard() {
           .gte("fecha_vencimiento", hoy.toISOString().slice(0, 10))
           .lte("fecha_vencimiento", en30dias)
           .order("fecha_vencimiento").limit(8),
+        supabase.from("detalle_donacion").select("alimentos(fecha_vencimiento)"),
       ]);
 
       setKpi({ alimentos: cAlimentos ?? 0, donantes: cDonantes ?? 0, donacionesMes: cDonMes ?? 0, porVencer: cVencer ?? 0 });
@@ -187,6 +191,22 @@ export default function Dashboard() {
         cantidad: v.cantidad,
         diasRestantes: diasHasta(v.fecha_vencimiento!),
       })));
+
+      const hoyStr = hoy.toISOString().slice(0, 10);
+      const en7Str = en30dias; // en30dias ya es hoy+7
+      let cVencido = 0, cPorVencer = 0, cBueno = 0;
+      (estadoRaw ?? []).forEach((row) => {
+        const ali = row.alimentos as { fecha_vencimiento: string | null } | null;
+        const f = ali?.fecha_vencimiento ?? null;
+        if (!f || f > en7Str) cBueno++;
+        else if (f < hoyStr) cVencido++;
+        else cPorVencer++;
+      });
+      const estadosCalc: EstadoData[] = [];
+      if (cVencido > 0)   estadosCalc.push({ nombre: "Vencido",    value: cVencido,   color: "#CC1717", valor: "vencido"    });
+      if (cPorVencer > 0) estadosCalc.push({ nombre: "Por vencer", value: cPorVencer, color: "#D97706", valor: "por_vencer" });
+      if (cBueno > 0)     estadosCalc.push({ nombre: "Bueno",      value: cBueno,     color: "#16a34a", valor: "bueno"      });
+      setEstados(estadosCalc);
 
       setLoading(false);
     }
@@ -317,8 +337,9 @@ export default function Dashboard() {
                     }}
                     activeDot={{
                       r: 6, strokeWidth: 0, cursor: "pointer",
-                      onClick: (_: unknown, payload: { payload?: MesData }) => {
-                        const fecha = payload?.payload?.fecha;
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      onClick: (_: unknown, payload: any) => {
+                        const fecha = payload?.payload?.fecha as string | undefined;
                         if (fecha) router.push(`/donaciones?filtro=mes&fecha=${fecha}`);
                       },
                     }}
@@ -347,7 +368,7 @@ export default function Dashboard() {
                       cx="50%" cy="50%"
                       innerRadius={45} outerRadius={75}
                       paddingAngle={2}
-                      onClick={(data: CategoriaData) => router.push(`/alimentos?filtro=categoria&id=${data.id}`)}
+                      onClick={(data) => router.push(`/alimentos?filtro=categoria&id=${(data as unknown as CategoriaData).id}`)}
                       style={{ cursor: "pointer" }}
                     >
                       {categorias.map((_, i) => (
@@ -379,9 +400,9 @@ export default function Dashboard() {
       </div>
 
       {/* Charts row 2 */}
-      <div className="grid gap-4">
+      <div className="grid gap-4 lg:grid-cols-5">
         {/* Top donantes */}
-        <Card>
+        <Card className="lg:col-span-3">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">Top donantes</CardTitle>
             <HintLabel>Clic en una barra para ver las donaciones de ese donante</HintLabel>
@@ -403,10 +424,58 @@ export default function Dashboard() {
                     dataKey="donaciones" name="Donaciones"
                     fill={CHART_RED} radius={[0, 4, 4, 0]}
                     style={{ cursor: "pointer" }}
-                    onClick={(data: DonanteData) => router.push(`/donaciones?filtro=donante&id=${data.id}`)}
+                    onClick={(data) => router.push(`/donaciones?filtro=donante&id=${(data as unknown as DonanteData).id}`)}
                   />
                 </BarChart>
               </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Estado de productos donados */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold">Estado de productos donados</CardTitle>
+            <HintLabel>Clic en un segmento para filtrar donaciones</HintLabel>
+          </CardHeader>
+          <CardContent>
+            {estados.length === 0 ? <EmptyChart /> : (
+              <div className="flex flex-col items-center gap-3">
+                <ResponsiveContainer width="100%" height={160}>
+                  <PieChart>
+                    <Pie
+                      data={estados}
+                      dataKey="value"
+                      nameKey="nombre"
+                      cx="50%" cy="50%"
+                      innerRadius={45} outerRadius={75}
+                      paddingAngle={2}
+                      onClick={(data) => router.push(`/donaciones?filtro=estado&valor=${(data as unknown as EstadoData).valor}`)}
+                      style={{ cursor: "pointer" }}
+                    >
+                      {estados.map((e, i) => (
+                        <Cell key={i} fill={e.color} stroke="none" />
+                      ))}
+                    </Pie>
+                    <Tooltip content={<CustomTooltip />} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="w-full space-y-1.5">
+                  {estados.map((e, i) => (
+                    <button
+                      key={i}
+                      className="flex w-full items-center justify-between text-xs hover:bg-muted/50 rounded px-1 py-0.5 transition-colors cursor-pointer"
+                      onClick={() => router.push(`/donaciones?filtro=estado&valor=${e.valor}`)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ background: e.color }} />
+                        <span className="text-muted-foreground">{e.nombre}</span>
+                      </div>
+                      <span className="font-semibold text-foreground">{e.value}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>
