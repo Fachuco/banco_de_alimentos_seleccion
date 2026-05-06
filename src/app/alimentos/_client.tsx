@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { AlertTriangle, X, Filter } from "lucide-react";
+import { AlertTriangle, X, Filter, Edit2, Trash2 } from "lucide-react";
 
 type Alimento = Database["public"]["Tables"]["alimentos"]["Row"];
 type Categoria = Database["public"]["Tables"]["categorias"]["Row"];
@@ -43,36 +43,28 @@ function AlimentosContent() {
 
   const [nombre, setNombre] = useState("");
   const [categoriaId, setCategoriaId] = useState("");
-  const [estadoId, setEstadoId] = useState("");
   const [cantidad, setCantidad] = useState("");
   const [unidadMedidaId, setUnidadMedidaId] = useState("");
-  const [fechaVencimiento, setFechaVencimiento] = useState("");
 
   const [filtroCategoria, setFiltroCategoria] = useState("todas");
   const [busqueda, setBusqueda] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [eliminandoId, setEliminandoId] = useState<number | null>(null);
-
-  /* validación de fecha vencida */
-  const esVencido = fechaVencimiento
-    ? new Date(fechaVencimiento) < new Date(new Date().toDateString())
-    : false;
-  const venceProximo =
-    fechaVencimiento && !esVencido
-      ? (new Date(fechaVencimiento).getTime() - Date.now()) / 86400000 <= 7
-      : false;
+  const [editandoId, setEditandoId] = useState<number | null>(null);
+  const [editNombre, setEditNombre] = useState("");
+  const [editCategoriaId, setEditCategoriaId] = useState("");
+  const [editCantidad, setEditCantidad] = useState("");
+  const [editUnidadMedidaId, setEditUnidadMedidaId] = useState("");
 
   async function cargarDatos() {
-    const [{ data: ali }, { data: cat }, { data: est }, { data: uni }] =
+    const [{ data: ali }, { data: cat }, { data: uni }] =
       await Promise.all([
-        supabase.from("alimentos").select("*").order("id", { ascending: false }),
+        supabase.from("alimentos").select("*").order("nombre", { ascending: true }),
         supabase.from("categorias").select("*").order("nombre"),
-        supabase.from("estados").select("*").order("nombre"),
         supabase.from("unidades_medida").select("*").order("nombre"),
       ]);
     setAlimentos(ali ?? []);
     setCategorias(cat ?? []);
-    setEstados(est ?? []);
     setUnidades(uni ?? []);
     setLoading(false);
   }
@@ -91,13 +83,13 @@ function AlimentosContent() {
     await supabase.from("alimentos").insert({
       nombre,
       categoria_id: categoriaId ? Number(categoriaId) : null,
-      estado_id: estadoId ? Number(estadoId) : null,
       cantidad: Number(cantidad),
       unidad_medida_id: unidadMedidaId ? Number(unidadMedidaId) : null,
-      fecha_vencimiento: fechaVencimiento || null,
     });
-    setNombre(""); setCategoriaId(""); setEstadoId("");
-    setCantidad(""); setUnidadMedidaId(""); setFechaVencimiento("");
+    setNombre(""); 
+    setCategoriaId("");
+    setCantidad(""); 
+    setUnidadMedidaId("");
     setDialogOpen(false);
     cargarDatos();
   }
@@ -108,25 +100,44 @@ function AlimentosContent() {
     cargarDatos();
   }
 
+  function abrirEdicion(a: Alimento) {
+    setEditandoId(a.id);
+    setEditNombre(a.nombre);
+    setEditCategoriaId(a.categoria_id ? String(a.categoria_id) : "");
+    setEditCantidad(String(a.cantidad));
+    setEditUnidadMedidaId(a.unidad_medida_id ? String(a.unidad_medida_id) : "");
+  }
+
+  function cerrarEdicion() {
+    setEditandoId(null);
+    setEditNombre("");
+    setEditCategoriaId("");
+    setEditCantidad("");
+    setEditUnidadMedidaId("");
+  }
+
+  async function guardarEdicion() {
+    if (!editandoId) return;
+    await supabase.from("alimentos").update({
+      nombre: editNombre,
+      categoria_id: editCategoriaId ? Number(editCategoriaId) : null,
+      cantidad: Number(editCantidad),
+      unidad_medida_id: editUnidadMedidaId ? Number(editUnidadMedidaId) : null,
+    }).eq("id", editandoId);
+    cerrarEdicion();
+    cargarDatos();
+  }
+
   function limpiarFiltroUrl() {
     router.push("/alimentos");
     setFiltroCategoria("todas");
   }
 
   /* --- filtrado --- */
-  const hoy = new Date().toISOString().slice(0, 10);
-  const en7 = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
-
   let alimentosFiltrados = alimentos;
 
   /* filtro desde URL */
-  if (filtroUrl === "por_vencer") {
-    alimentosFiltrados = alimentosFiltrados.filter(
-      (a) => a.fecha_vencimiento && a.fecha_vencimiento >= hoy && a.fecha_vencimiento <= en7
-    );
-  } else if (filtroUrl === "estado" && filtroId) {
-    alimentosFiltrados = alimentosFiltrados.filter((a) => a.estado_id === filtroId);
-  } else if (filtroUrl === "categoria" && filtroId) {
+  if (filtroUrl === "categoria" && filtroId) {
     alimentosFiltrados = alimentosFiltrados.filter((a) => a.categoria_id === filtroId);
   } else {
     /* filtro de la UI (select) */
@@ -146,11 +157,7 @@ function AlimentosContent() {
 
   /* etiqueta del filtro activo */
   const filtroActivo =
-    filtroUrl === "por_vencer"
-      ? "Próximos a vencer (7 días)"
-      : filtroUrl === "estado" && filtroId
-      ? `Estado: ${estados.find((e) => e.id === filtroId)?.nombre ?? filtroId}`
-      : filtroUrl === "categoria" && filtroId
+    filtroUrl === "categoria" && filtroId
       ? `Categoría: ${categorias.find((c) => c.id === filtroId)?.nombre ?? filtroId}`
       : null;
 
@@ -165,9 +172,9 @@ function AlimentosContent() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Selección de Alimentos</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Alimentos</h1>
           <p className="text-muted-foreground">
-            Clasifica los alimentos recibidos por categoría, peso y fecha de vencimiento.
+            Registra los productos del banco de alimentos con nombre, categoría, cantidad y unidad de medida.
           </p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -204,21 +211,6 @@ function AlimentosContent() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label>Estado</Label>
-                  <Select
-                    value={estadoId}
-                    onValueChange={(v) => setEstadoId(v ?? "")}
-                    items={estados.map((e) => ({ value: String(e.id), label: e.nombre }))}
-                  >
-                    <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                    <SelectContent>
-                      {estados.map((e) => (
-                        <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -245,33 +237,6 @@ function AlimentosContent() {
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Fecha de Vencimiento</Label>
-                <Input
-                  type="date"
-                  value={fechaVencimiento}
-                  onChange={(e) => setFechaVencimiento(e.target.value)}
-                  className={esVencido ? "border-red-500 focus-visible:ring-red-300" : ""}
-                />
-                {esVencido && (
-                  <div className="flex items-start gap-2 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
-                    <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">Fecha ya vencida</p>
-                      <p className="text-xs text-red-600 mt-0.5">
-                        Este alimento ya está vencido. Considera marcarlo con un estado apropiado (ej: Vencido o No apto).
-                      </p>
-                    </div>
-                  </div>
-                )}
-                {venceProximo && (
-                  <div className="flex items-start gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-700">
-                    <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                    <p className="text-xs">Vence en menos de 7 días. Priorizar su distribución.</p>
-                  </div>
-                )}
               </div>
 
               <DialogFooter>
@@ -368,9 +333,9 @@ function AlimentosContent() {
                   <TableRow>
                     <TableHead>Nombre</TableHead>
                     <TableHead>Categoría</TableHead>
-                    <TableHead className="text-right">Cantidad</TableHead>
-                    <TableHead>Ingreso</TableHead>
-                    <TableHead className="w-[100px] text-right">Acciones</TableHead>
+                    <TableHead className="text-center">Cantidad</TableHead>
+                    <TableHead className="text-center">Unidades de Medida</TableHead>
+                    <TableHead className="w-[80px] text-center">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -384,31 +349,106 @@ function AlimentosContent() {
                         <TableCell>
                           {cat ? <Badge variant="secondary">{cat}</Badge> : <span className="text-muted-foreground">—</span>}
                         </TableCell>
-                        <TableCell className="text-right font-mono">
-                          {a.cantidad}
-                          {uni && <span className="ml-1 text-xs text-muted-foreground">{uni}</span>}
+                        <TableCell className="text-center font-mono">{a.cantidad}</TableCell>
+                        <TableCell className="text-center text-sm text-muted-foreground">
+                          {uni ?? "—"}
                         </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {new Date(a.fecha_ingreso).toLocaleDateString("es", { year: "numeric", month: "short", day: "numeric" })}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Dialog open={eliminandoId === a.id} onOpenChange={(open) => setEliminandoId(open ? a.id : null)}>
-                            <DialogTrigger render={<Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" />}>
-                              Eliminar
-                            </DialogTrigger>
-                            <DialogContent>
-                              <DialogHeader>
-                                <DialogTitle>Confirmar eliminación</DialogTitle>
-                                <DialogDescription>
-                                  ¿Estás seguro de eliminar <strong>{a.nombre}</strong>? Esta acción no se puede deshacer.
-                                </DialogDescription>
-                              </DialogHeader>
-                              <DialogFooter>
-                                <Button variant="outline" onClick={() => setEliminandoId(null)}>Cancelar</Button>
-                                <Button variant="destructive" onClick={() => eliminarAlimento(a.id)}>Eliminar</Button>
-                              </DialogFooter>
-                            </DialogContent>
-                          </Dialog>
+                        <TableCell className="text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <Dialog open={editandoId === a.id} onOpenChange={(open) => {
+                              if (open) abrirEdicion(a);
+                              else cerrarEdicion();
+                            }}>
+                              <DialogTrigger render={<Button variant="ghost" size="sm" className="p-1 h-8 w-8" />}>
+                                <Edit2 className="h-4 w-4 text-blue-600 hover:text-blue-700" />
+                              </DialogTrigger>
+                              <DialogContent className="max-w-lg">
+                                <DialogHeader>
+                                  <DialogTitle>Editar Alimento</DialogTitle>
+                                  <DialogDescription>Actualiza los datos del alimento.</DialogDescription>
+                                </DialogHeader>
+                                <div className="space-y-4">
+                                  <div className="space-y-2">
+                                    <Label>Nombre del alimento *</Label>
+                                    <Input
+                                      value={editNombre}
+                                      onChange={(e) => setEditNombre(e.target.value)}
+                                      placeholder="Ej: Arroz integral, Leche en polvo..."
+                                      required
+                                    />
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                      <Label>Categoría</Label>
+                                      <Select
+                                        value={editCategoriaId}
+                                        onValueChange={(v) => setEditCategoriaId(v ?? "")}
+                                        items={categorias.map((c) => ({ value: String(c.id), label: c.nombre }))}
+                                      >
+                                        <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                                        <SelectContent>
+                                          {categorias.map((c) => (
+                                            <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                      <Label>Cantidad *</Label>
+                                      <Input
+                                        type="number" min={1} value={editCantidad}
+                                        onChange={(e) => setEditCantidad(e.target.value)}
+                                        placeholder="Ej: 10" required
+                                      />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label>Unidad de Medida</Label>
+                                      <Select
+                                        value={editUnidadMedidaId}
+                                        onValueChange={(v) => setEditUnidadMedidaId(v ?? "")}
+                                        items={unidades.map((u) => ({ value: String(u.id), label: u.nombre }))}
+                                      >
+                                        <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                                        <SelectContent>
+                                          {unidades.map((u) => (
+                                            <SelectItem key={u.id} value={String(u.id)}>{u.nombre}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  </div>
+                                </div>
+                                <DialogFooter>
+                                  <Button type="button" variant="outline" onClick={cerrarEdicion}>
+                                    Cancelar
+                                  </Button>
+                                  <Button type="submit" onClick={guardarEdicion}>Guardar cambios</Button>
+                                </DialogFooter>
+                              </DialogContent>
+                            </Dialog>
+
+                            <Dialog open={eliminandoId === a.id} onOpenChange={(open) => setEliminandoId(open ? a.id : null)}>
+                              <DialogTrigger render={<Button variant="ghost" size="sm" className="p-1 h-8 w-8" />}>
+                                <Trash2 className="h-4 w-4 text-red-600 hover:text-red-700" />
+                              </DialogTrigger>
+                              <DialogContent>
+                                <DialogHeader>
+                                  <DialogTitle>Confirmar eliminación</DialogTitle>
+                                  <DialogDescription>
+                                    ¿Estás seguro de eliminar <strong>{a.nombre}</strong>? Esta acción no se puede deshacer.
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <DialogFooter>
+                                  <Button variant="outline" onClick={() => setEliminandoId(null)}>Cancelar</Button>
+                                  <Button variant="destructive" onClick={() => eliminarAlimento(a.id)}>Eliminar</Button>
+                                </DialogFooter>
+                              </DialogContent>
+                            </Dialog>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );

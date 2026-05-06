@@ -23,17 +23,27 @@ import { Filter, X, AlertTriangle, ChevronDown, ChevronRight } from "lucide-reac
 
 type Donante = Database["public"]["Tables"]["donantes"]["Row"];
 type Alimento = Database["public"]["Tables"]["alimentos"]["Row"];
+type Estado = Database["public"]["Tables"]["estados"]["Row"];
+type UnidadMedida = Database["public"]["Tables"]["unidades_medida"]["Row"];
 
-interface DetalleDonacion { alimento_id: number; cantidad: number }
+interface DetalleDonacion { 
+  alimento_id: number; 
+  cantidad: number;
+  fecha_vencimiento: string | null;
+  estado_id: number | null;
+}
 
 interface DetalleConAlimento {
   cantidad: number;
+  fecha_vencimiento: string | null;
+  estado_id: number | null;
   alimentos: {
     nombre: string;
-    fecha_vencimiento: string | null;
+    cantidad: number;
     unidad_medida_id: number | null;
     unidades_medida: { nombre: string } | null;
   } | null;
+  estados: { nombre: string } | null;
 }
 
 interface DonacionConDetalle {
@@ -47,8 +57,12 @@ interface DonacionConDetalle {
 const hoy = new Date().toISOString().slice(0, 10);
 const en7 = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
 
-function badgeVencimiento(fecha: string | null) {
+function badgeVencimiento(fecha: string | null, estado: { nombre: string } | null) {
   if (!fecha) return null;
+  const hoy = new Date().toISOString().slice(0, 10);
+  const en7 = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+  
+  if (estado?.nombre === "Caducado") return { label: "Caducado", cls: "bg-red-100 text-red-700" };
   if (fecha < hoy) return { label: "Vencido", cls: "bg-red-100 text-red-700" };
   if (fecha <= en7) return { label: "Por vencer", cls: "bg-amber-100 text-amber-700" };
   return null;
@@ -56,15 +70,19 @@ function badgeVencimiento(fecha: string | null) {
 
 function DonacionRow({ donacion }: { donacion: DonacionConDetalle }) {
   const [abierto, setAbierto] = useState(false);
+  const hoy = new Date().toISOString().slice(0, 10);
+  const en7 = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+  
   const tieneAlertaVenc = donacion.detalle_donacion.some((d) => {
-    const f = d.alimentos?.fecha_vencimiento ?? null;
-    return f && f <= en7;
+    const f = d.fecha_vencimiento ?? null;
+    if (d.estados?.nombre === "Caducado") return true;
+    return f && f < hoy;
   });
 
   return (
     <>
       <tr
-        className={`border-b cursor-pointer hover:bg-muted/30 transition-colors ${tieneAlertaVenc ? "bg-amber-50/30" : ""}`}
+        className={`border-b cursor-pointer hover:bg-muted/30 transition-colors ${tieneAlertaVenc ? "bg-red-50/30" : ""}`}
         onClick={() => setAbierto((v) => !v)}
       >
         <td className="py-3 pl-6 pr-4 w-[80px]">
@@ -82,8 +100,8 @@ function DonacionRow({ donacion }: { donacion: DonacionConDetalle }) {
               {donacion.detalle_donacion.length} producto{donacion.detalle_donacion.length !== 1 ? "s" : ""}
             </span>
             {tieneAlertaVenc && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                <AlertTriangle className="h-2.5 w-2.5" /> Alerta venc.
+              <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">
+                <AlertTriangle className="h-2.5 w-2.5" /> Vencido
               </span>
             )}
           </div>
@@ -104,17 +122,18 @@ function DonacionRow({ donacion }: { donacion: DonacionConDetalle }) {
                   <tr className="bg-muted/40 text-xs text-muted-foreground uppercase tracking-wide">
                     <th className="py-2 pl-4 pr-3 text-left font-medium">Alimento</th>
                     <th className="py-2 px-3 text-right font-medium">Cantidad</th>
-                    <th className="py-2 pl-3 pr-4 text-left font-medium">Vencimiento</th>
+                    <th className="py-2 px-3 text-left font-medium">Vencimiento</th>
+                    <th className="py-2 pl-3 pr-4 text-left font-medium">Estado</th>
                   </tr>
                 </thead>
                 <tbody>
                   {donacion.detalle_donacion.length === 0 ? (
                     <tr>
-                      <td colSpan={3} className="py-3 pl-4 text-muted-foreground text-xs">Sin detalle registrado.</td>
+                      <td colSpan={4} className="py-3 pl-4 text-muted-foreground text-xs">Sin detalle registrado.</td>
                     </tr>
                   ) : (
                     donacion.detalle_donacion.map((d, i) => {
-                      const alerta = badgeVencimiento(d.alimentos?.fecha_vencimiento ?? null);
+                      const alerta = badgeVencimiento(d.fecha_vencimiento ?? null, d.estados);
                       return (
                         <tr key={i} className={`border-t ${alerta?.cls.includes("red") ? "bg-red-50/40" : alerta ? "bg-amber-50/40" : ""}`}>
                           <td className="py-2.5 pl-4 pr-3 font-medium text-foreground">
@@ -126,23 +145,22 @@ function DonacionRow({ donacion }: { donacion: DonacionConDetalle }) {
                               <span className="ml-1 text-xs">{d.alimentos.unidades_medida.nombre}</span>
                             )}
                           </td>
-                          <td className="py-2.5 pl-3 pr-4">
-                            {d.alimentos?.fecha_vencimiento ? (
-                              <div className="flex items-center gap-2">
-                                <span className={alerta?.cls.includes("red") ? "text-red-600 font-medium" : alerta ? "text-amber-600 font-medium" : "text-muted-foreground"}>
-                                  {new Date(d.alimentos.fecha_vencimiento).toLocaleDateString("es", {
-                                    day: "numeric", month: "short", year: "numeric",
-                                  })}
-                                </span>
-                                {alerta && (
-                                  <span className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-semibold ${alerta.cls}`}>
-                                    <AlertTriangle className="h-2.5 w-2.5" />
-                                    {alerta.label}
-                                  </span>
-                                )}
-                              </div>
+                          <td className="py-2.5 px-3 text-muted-foreground">
+                            {d.fecha_vencimiento ? (
+                              new Date(d.fecha_vencimiento).toLocaleDateString("es", {
+                                day: "numeric", month: "short", year: "numeric",
+                              })
                             ) : (
-                              <span className="text-muted-foreground">—</span>
+                              <span>Sin fecha</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 pl-3 pr-4">
+                            {d.estados?.nombre ? (
+                              <Badge variant={d.estados.nombre === "Caducado" ? "destructive" : "secondary"}>
+                                {d.estados.nombre}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">—</span>
                             )}
                           </td>
                         </tr>
@@ -169,16 +187,19 @@ function DonacionesContent() {
 
   const [donantes, setDonantes] = useState<Donante[]>([]);
   const [alimentos, setAlimentos] = useState<Alimento[]>([]);
+  const [estados, setEstados] = useState<Estado[]>([]);
   const [donanteId, setDonanteId] = useState("");
-  const [detalles, setDetalles] = useState<DetalleDonacion[]>([{ alimento_id: 0, cantidad: 1 }]);
+  const [detalles, setDetalles] = useState<DetalleDonacion[]>([{ alimento_id: 0, cantidad: 1, fecha_vencimiento: null, estado_id: null }]);
   const [loading, setLoading] = useState(true);
   const [donaciones, setDonaciones] = useState<DonacionConDetalle[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [busquedaAlimento, setBusquedaAlimento] = useState<{[key: number]: string}>({});
 
   async function cargarDatos() {
-    const [{ data: don }, { data: ali }, { data: donac }] = await Promise.all([
+    const [{ data: don }, { data: ali }, { data: est }, { data: donac }] = await Promise.all([
       supabase.from("donantes").select("*").order("nombre"),
-      supabase.from("alimentos").select("*").order("nombre"),
+      supabase.from("alimentos").select("id, nombre, cantidad, unidad_medida_id, categorias(id, nombre), unidades_medida(nombre)").order("nombre"),
+      supabase.from("estados").select("*").order("nombre"),
       supabase
         .from("donaciones")
         .select(`
@@ -188,13 +209,17 @@ function DonacionesContent() {
           donantes(nombre),
           detalle_donacion(
             cantidad,
-            alimentos(nombre, fecha_vencimiento, unidad_medida_id, unidades_medida(nombre))
+            fecha_vencimiento,
+            estado_id,
+            alimentos(nombre, cantidad, unidad_medida_id, unidades_medida(nombre)),
+            estados(nombre)
           )
         `)
         .order("id", { ascending: false }),
     ]);
     setDonantes(don ?? []);
     setAlimentos(ali ?? []);
+    setEstados(est ?? []);
     setDonaciones((donac as unknown as DonacionConDetalle[]) ?? []);
     setLoading(false);
   }
@@ -202,15 +227,32 @@ function DonacionesContent() {
   useEffect(() => { cargarDatos(); }, []);
 
   function agregarDetalle() {
-    setDetalles([...detalles, { alimento_id: 0, cantidad: 1 }]);
+    setDetalles([...detalles, { alimento_id: 0, cantidad: 1, fecha_vencimiento: null, estado_id: null }]);
   }
-  function actualizarDetalle(index: number, campo: keyof DetalleDonacion, valor: number) {
+  function actualizarDetalle(index: number, campo: keyof DetalleDonacion, valor: any) {
     const nuevos = [...detalles];
     nuevos[index] = { ...nuevos[index], [campo]: valor };
     setDetalles(nuevos);
   }
   function eliminarDetalle(index: number) {
     setDetalles(detalles.filter((_, i) => i !== index));
+  }
+
+  function obtenerEstadoAutomatico(fecha_vencimiento: string | null): number | null {
+    if (!fecha_vencimiento) return null;
+    const hoy = new Date().toISOString().slice(0, 10);
+    if (fecha_vencimiento <= hoy) {
+      // Buscar estado "Caducado"
+      const estadoCaducado = estados.find(e => e.nombre.toLowerCase() === "caducado");
+      return estadoCaducado?.id ?? null;
+    }
+    return null;
+  }
+
+  function esEstadoNoEditable(fecha_vencimiento: string | null): boolean {
+    if (!fecha_vencimiento) return false;
+    const hoy = new Date().toISOString().slice(0, 10);
+    return fecha_vencimiento <= hoy;
   }
 
   async function registrarDonacion(e: React.FormEvent) {
@@ -223,11 +265,18 @@ function DonacionesContent() {
       .select("id").single();
     if (donacion) {
       await supabase.from("detalle_donacion").insert(
-        detallesValidos.map((d) => ({ donacion_id: donacion.id, alimento_id: d.alimento_id, cantidad: d.cantidad }))
+        detallesValidos.map((d) => ({ 
+          donacion_id: donacion.id, 
+          alimento_id: d.alimento_id, 
+          cantidad: d.cantidad,
+          fecha_vencimiento: d.fecha_vencimiento || null,
+          estado_id: d.estado_id || obtenerEstadoAutomatico(d.fecha_vencimiento)
+        }))
       );
     }
     setDonanteId("");
-    setDetalles([{ alimento_id: 0, cantidad: 1 }]);
+    setDetalles([{ alimento_id: 0, cantidad: 1, fecha_vencimiento: null, estado_id: null }]);
+    setBusquedaAlimento({});
     setDialogOpen(false);
     cargarDatos();
   }
@@ -314,35 +363,125 @@ function DonacionesContent() {
                     + Agregar
                   </Button>
                 </div>
-                <div className="max-h-56 space-y-2 overflow-y-auto">
-                  {detalles.map((detalle, i) => (
-                    <div key={i} className="flex items-center gap-2 rounded-md border bg-muted/30 p-2">
-                      <Select
-                        value={detalle.alimento_id ? String(detalle.alimento_id) : ""}
-                        onValueChange={(v) => actualizarDetalle(i, "alimento_id", Number(v))}
-                        items={alimentos.map((a) => ({ value: String(a.id), label: a.nombre }))}
-                      >
-                        <SelectTrigger className="flex-1"><SelectValue placeholder="Alimento" /></SelectTrigger>
-                        <SelectContent>
-                          {alimentos.map((a) => (
-                            <SelectItem key={a.id} value={String(a.id)}>{a.nombre}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        type="number" min={1} value={detalle.cantidad}
-                        onChange={(e) => actualizarDetalle(i, "cantidad", Number(e.target.value))}
-                        className="w-20"
-                      />
-                      {detalles.length > 1 && (
-                        <Button
-                          type="button" variant="ghost" size="sm"
-                          className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                          onClick={() => eliminarDetalle(i)}
-                        >✕</Button>
-                      )}
-                    </div>
-                  ))}
+                <div className="max-h-96 space-y-3 overflow-y-auto">
+                  {detalles.map((detalle, i) => {
+                    const alimentoSeleccionado = alimentos.find(a => a.id === detalle.alimento_id);
+                    const alimentosFiltrados = busquedaAlimento[i]
+                      ? alimentos.filter(a => a.nombre.toLowerCase().includes(busquedaAlimento[i].toLowerCase()))
+                      : [];
+                    const mostrarSugerencias = busquedaAlimento[i] && alimentosFiltrados.length > 0;
+                    
+                    return (
+                      <div key={i} className="rounded-md border bg-muted/30 p-3 space-y-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Producto *</Label>
+                          <div className="relative">
+                            <Input
+                              placeholder="Buscar producto..."
+                              value={busquedaAlimento[i] || alimentoSeleccionado?.nombre || ""}
+                              onChange={(e) => setBusquedaAlimento({...busquedaAlimento, [i]: e.target.value})}
+                              className="text-sm"
+                            />
+                            {mostrarSugerencias && (
+                              <div className="absolute top-full left-0 right-0 mt-1 border bg-white rounded-md shadow-lg z-10">
+                                {alimentosFiltrados.slice(0, 5).map((a) => (
+                                  <button
+                                    key={a.id}
+                                    type="button"
+                                    onClick={() => {
+                                      actualizarDetalle(i, "alimento_id", a.id);
+                                      setBusquedaAlimento({...busquedaAlimento, [i]: ""});
+                                    }}
+                                    className="w-full text-left px-3 py-2 hover:bg-muted text-sm border-b last:border-b-0"
+                                  >
+                                    <div className="font-medium">{a.nombre}</div>
+                                    <div className="text-xs text-muted-foreground">
+                                      {a.cantidad} {a.unidades_medida?.nombre || ""}
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          {alimentoSeleccionado && (
+                            <div className="text-xs bg-primary/5 border border-primary/20 rounded px-2 py-1">
+                              <span className="font-medium">{alimentoSeleccionado.nombre}</span>
+                              <span className="text-muted-foreground ml-2">
+                                {alimentoSeleccionado.cantidad} {alimentoSeleccionado.unidades_medida?.nombre}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <Label className="text-xs">Cantidad donada *</Label>
+                            <Input
+                              type="number" min={1} value={detalle.cantidad}
+                              onChange={(e) => actualizarDetalle(i, "cantidad", Number(e.target.value))}
+                              className="text-sm"
+                              placeholder="0"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Vencimiento</Label>
+                            <Input
+                              type="date"
+                              value={detalle.fecha_vencimiento || ""}
+                              onChange={(e) => {
+                                const nuevaFecha = e.target.value || null;
+                                actualizarDetalle(i, "fecha_vencimiento", nuevaFecha);
+                                // Si la fecha es pasada, asignar automáticamente estado Caducado
+                                if (nuevaFecha) {
+                                  const estadoAuto = obtenerEstadoAutomatico(nuevaFecha);
+                                  if (estadoAuto !== null) {
+                                    actualizarDetalle(i, "estado_id", estadoAuto);
+                                  }
+                                }
+                              }}
+                              className="text-sm"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label className="text-xs">Estado</Label>
+                          {esEstadoNoEditable(detalle.fecha_vencimiento) ? (
+                            <div className="text-xs bg-red-50 border border-red-200 rounded px-2 py-1.5 text-red-700 font-medium">
+                              🚫 Caducado (automático - no editable)
+                            </div>
+                          ) : (
+                            <>
+                              <Select
+                                value={detalle.estado_id ? String(detalle.estado_id) : ""}
+                                onValueChange={(v) => actualizarDetalle(i, "estado_id", v ? Number(v) : null)}
+                                items={estados.map((e) => ({ value: String(e.id), label: e.nombre }))}
+                              >
+                                <SelectTrigger className="text-sm h-8"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="">Sin estado</SelectItem>
+                                  {estados.map((e) => (
+                                    <SelectItem key={e.id} value={String(e.id)}>{e.nombre}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              {detalle.estado_id && estados.find(e => e.id === detalle.estado_id)?.nombre.toLowerCase() === "dañado" && (
+                                <p className="text-xs text-amber-600 mt-1">⚠️ Productos dañados no aparecerán en el stock</p>
+                              )}
+                            </>
+                          )}
+                        </div>
+
+                        {detalles.length > 1 && (
+                          <Button
+                            type="button" variant="ghost" size="sm"
+                            className="w-full h-7 text-destructive hover:text-destructive text-xs"
+                            onClick={() => eliminarDetalle(i)}
+                          >✕ Remover</Button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 

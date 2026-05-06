@@ -46,38 +46,26 @@ export interface Database {
           nombre: string;
           categoria_id: number | null;
           fecha_ingreso: string;
-          estado_id: number | null;
           cantidad: number;
           unidad_medida_id: number | null;
-          fecha_vencimiento: string | null;
         };
         Insert: {
           nombre: string;
           categoria_id?: number | null;
-          estado_id?: number | null;
           cantidad: number;
           unidad_medida_id?: number | null;
-          fecha_vencimiento?: string | null;
         };
         Update: {
           nombre?: string;
           categoria_id?: number | null;
-          estado_id?: number | null;
           cantidad?: number;
           unidad_medida_id?: number | null;
-          fecha_vencimiento?: string | null;
         };
         Relationships: [
           {
             foreignKeyName: "alimentos_categoria_id_fkey";
             columns: ["categoria_id"];
             referencedRelation: "categorias";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "alimentos_estado_id_fkey";
-            columns: ["estado_id"];
-            referencedRelation: "estados";
             referencedColumns: ["id"];
           },
           {
@@ -137,16 +125,22 @@ export interface Database {
           donacion_id: number | null;
           alimento_id: number | null;
           cantidad: number;
+          fecha_vencimiento: string | null;
+          estado_id: number | null;
         };
         Insert: {
           donacion_id?: number | null;
           alimento_id?: number | null;
           cantidad: number;
+          fecha_vencimiento?: string | null;
+          estado_id?: number | null;
         };
         Update: {
           donacion_id?: number | null;
           alimento_id?: number | null;
           cantidad?: number;
+          fecha_vencimiento?: string | null;
+          estado_id?: number | null;
         };
         Relationships: [
           {
@@ -159,6 +153,12 @@ export interface Database {
             foreignKeyName: "detalle_donacion_alimento_id_fkey";
             columns: ["alimento_id"];
             referencedRelation: "alimentos";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "detalle_donacion_estado_id_fkey";
+            columns: ["estado_id"];
+            referencedRelation: "estados";
             referencedColumns: ["id"];
           },
         ];

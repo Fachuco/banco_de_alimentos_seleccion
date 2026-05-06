@@ -500,7 +500,7 @@ export default function Dashboard() {
                     <th className="py-2.5 pl-6 pr-4 text-left text-xs font-medium text-amber-700 uppercase tracking-wide">Alimento</th>
                     <th className="py-2.5 px-4 text-left text-xs font-medium text-amber-700 uppercase tracking-wide">Cantidad</th>
                     <th className="py-2.5 px-4 text-left text-xs font-medium text-amber-700 uppercase tracking-wide">Vencimiento</th>
-                    <th className="py-2.5 pl-4 pr-6 text-left text-xs font-medium text-amber-700 uppercase tracking-wide">Estado</th>
+                    <th className="py-2.5 pl-4 pr-6 text-left text-xs font-medium text-amber-700 uppercase tracking-wide">Cuándo vence</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -513,7 +513,7 @@ export default function Dashboard() {
                       </td>
                       <td className="py-2.5 pl-4 pr-6">
                         <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${badgeColor(v.diasRestantes)}`}>
-                          {v.diasRestantes === 0 ? "Hoy" : v.diasRestantes === 1 ? "Mañana" : `${v.diasRestantes} días`}
+                          {v.diasRestantes === 0 ? "Vence hoy" : v.diasRestantes === 1 ? "Vence mañana" : `Vence en ${v.diasRestantes} días`}
                         </span>
                       </td>
                     </tr>
@@ -526,11 +526,12 @@ export default function Dashboard() {
       )}
 
       {/* Accesos rápidos */}
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-4">
         {[
-          { href: "/alimentos", title: "Registrar Alimento", desc: "Clasificar un nuevo alimento por categoría, peso y fecha" },
-          { href: "/donantes", title: "Nuevo Donante", desc: "Registrar una persona u organización como donante" },
-          { href: "/donaciones", title: "Registrar Donación", desc: "Registrar una donación con sus alimentos detallados" },
+          { href: "/alimentos", title: "Registrar Producto", desc: "Registrar un nuevo producto base" },
+          { href: "/donantes", title: "Nuevo Donante", desc: "Registrar persona u organización" },
+          { href: "/donaciones", title: "Registrar Donación", desc: "Registrar una donación con alimentos" },
+          { href: "/stock", title: "Ver Stock", desc: "Ver inventario consolidado" },
         ].map((a) => (
           <Link key={a.href} href={a.href}>
             <Card className="group h-full cursor-pointer transition-all hover:border-primary/40 hover:shadow-sm">

@@ -10,6 +10,7 @@ const links = [
   { href: "/donantes", label: "Donantes" },
   { href: "/donaciones", label: "Donaciones" },
   { href: "/alimentos", label: "Alimentos" },
+  { href: "/stock", label: "Stock" },
 ];
 
 export function Navbar() {
