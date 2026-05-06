@@ -218,7 +218,7 @@ function DonacionesContent() {
         .order("id", { ascending: false }),
     ]);
     setDonantes(don ?? []);
-    setAlimentos(ali ?? []);
+    setAlimentos((ali as unknown as Alimento[]) ?? []);
     setEstados(est ?? []);
     setDonaciones((donac as unknown as DonacionConDetalle[]) ?? []);
     setLoading(false);
