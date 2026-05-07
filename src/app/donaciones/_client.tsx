@@ -643,7 +643,7 @@ function DonacionesContent() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="np-categoria">Categoría</Label>
-                <Select value={nuevoProducto.categoria_id} onValueChange={(v) => setNuevoProducto({...nuevoProducto, categoria_id: v})}>
+                <Select value={nuevoProducto.categoria_id} onValueChange={(v) => setNuevoProducto({...nuevoProducto, categoria_id: v ?? ""})}>
                   <SelectTrigger id="np-categoria">
                     <SelectValue placeholder="Seleccionar" />
                   </SelectTrigger>
@@ -668,7 +668,7 @@ function DonacionesContent() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="np-unidad">Unidad de medida</Label>
-                  <Select value={nuevoProducto.unidad_medida_id} onValueChange={(v) => setNuevoProducto({...nuevoProducto, unidad_medida_id: v})}>
+                  <Select value={nuevoProducto.unidad_medida_id} onValueChange={(v) => setNuevoProducto({...nuevoProducto, unidad_medida_id: v ?? ""})}>
                     <SelectTrigger id="np-unidad">
                       <SelectValue placeholder="Seleccionar" />
                     </SelectTrigger>
