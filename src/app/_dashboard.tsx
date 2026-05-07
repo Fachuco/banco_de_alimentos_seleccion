@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { getHoyLocal, getFechaFuturaLocal, getPrimerDiaDelMesLocal, getFechaPasadaLocalMeses } from "@/lib/utils";
 import {
   Card,
   CardHeader,
@@ -62,14 +63,36 @@ function mesKey(fecha: string) {
   const d = new Date(fecha);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
-function diasHasta(fecha: string) {
-  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-  return Math.round((new Date(fecha).getTime() - hoy.getTime()) / 86400000);
+function diasHasta(fecha: string, hoyLocal: string) {
+  // Comparar strings YYYY-MM-DD en timezone de Bolivia
+  const fechaStr = typeof fecha === 'string' ? fecha.split('T')[0] : fecha;
+  const hoyStr = hoyLocal;
+  
+  // Contar días: si hoy es 2026-05-06 y fecha es 2026-05-06, retorna 0
+  if (fechaStr === hoyStr) return 0;
+  
+  const [añoF, mesF, díaF] = fechaStr.split('-').map(Number);
+  const [añoH, mesH, díaH] = hoyStr.split('-').map(Number);
+  // Usar UTC para evitar problemas de timezone local
+  const fDate = new Date(Date.UTC(añoF, mesF - 1, díaF, 12, 0, 0));
+  const hDate = new Date(Date.UTC(añoH, mesH - 1, díaH, 12, 0, 0));
+  
+  return Math.ceil((fDate.getTime() - hDate.getTime()) / 86400000);
 }
 function badgeColor(dias: number) {
   if (dias <= 7) return "bg-red-100 text-red-700";
   if (dias <= 15) return "bg-orange-100 text-orange-700";
   return "bg-yellow-100 text-yellow-700";
+}
+
+function formatearFechaDirecta(fechaStr: string | null): string {
+  if (!fechaStr) return "Sin fecha";
+  // Parsear directamente sin pasar por Date (evita problemas de timezone)
+  const fecha = fechaStr.split('T')[0]; // "2026-05-07"
+  const [año, mes, día] = fecha.split('-');
+  const meses = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+  const mesIdx = parseInt(mes) - 1;
+  return `${parseInt(día)} ${meses[mesIdx]} ${año}`;
 }
 
 function CustomTooltip({ active, payload, label }: {
@@ -110,10 +133,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function cargar() {
-      const hoy = new Date();
-      const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().slice(0, 10);
-      const en30dias = new Date(hoy.getTime() + 7 * 86400000).toISOString().slice(0, 10);
-      const hace6meses = new Date(hoy.getFullYear(), hoy.getMonth() - 5, 1).toISOString().slice(0, 10);
+      const inicioMes = getPrimerDiaDelMesLocal();
+      const en30dias = getFechaFuturaLocal(7);
+      const hace6meses = getFechaPasadaLocalMeses(6);
+      const hoy = getHoyLocal();
 
       const [
         { count: cAlimentos },
@@ -130,14 +153,16 @@ export default function Dashboard() {
         supabase.from("donantes").select("id", { count: "exact", head: true }),
         supabase.from("donaciones").select("id", { count: "exact", head: true }).gte("fecha_donacion", inicioMes),
         supabase.from("detalle_donacion").select("id", { count: "exact", head: true })
-          .gte("fecha_vencimiento", hoy.toISOString().slice(0, 10))
-          .lte("fecha_vencimiento", en30dias),
+          .gte("fecha_vencimiento", hoy)
+          .lte("fecha_vencimiento", en30dias)
+          .neq("estado_id", 3),  // Excluir Dañados
         supabase.from("donaciones").select("fecha_donacion").gte("fecha_donacion", hace6meses).order("fecha_donacion"),
         supabase.from("alimentos").select("categoria_id, categorias(nombre)").not("categoria_id", "is", null),
         supabase.from("donaciones").select("donante_id, donantes(nombre, id)").not("donante_id", "is", null),
-        supabase.from("detalle_donacion").select("fecha_vencimiento, cantidad, alimentos(nombre)")
-          .gte("fecha_vencimiento", hoy.toISOString().slice(0, 10))
+        supabase.from("detalle_donacion").select("fecha_vencimiento, cantidad, alimentos(nombre), estados(nombre)")
+          .gte("fecha_vencimiento", hoy)
           .lte("fecha_vencimiento", en30dias)
+          .not("estado_id", "is", null)
           .order("fecha_vencimiento").limit(8),
         supabase.from("detalle_donacion").select("alimentos(nombre), fecha_vencimiento"),
       ]);
@@ -178,21 +203,57 @@ export default function Dashboard() {
         .map(([id, { nombre, count }]) => ({ id: Number(id), nombre, donaciones: count }))
         .sort((a, b) => b.donaciones - a.donaciones).slice(0, 6));
 
-      setVencimientos((vencData ?? []).map((v) => ({
+      setVencimientos(((vencData ?? []).filter((v) => {
+        const estado = (v.estados as any)?.nombre;
+        // Excluir productos caducados o dañados
+        return estado !== "Caducado" && estado?.toLowerCase() !== "dañado";
+      })).map((v) => ({
         nombre: (v.alimentos as any)?.nombre ?? "Sin nombre",
         fecha_vencimiento: v.fecha_vencimiento!,
         cantidad: v.cantidad,
-        diasRestantes: diasHasta(v.fecha_vencimiento!),
+        diasRestantes: diasHasta(v.fecha_vencimiento!, hoy),
       })));
 
-      const hoyStr = hoy.toISOString().slice(0, 10);
+      const hoyStr = hoy;
       const en7Str = en30dias;
       let cVencido = 0, cPorVencer = 0, cBueno = 0;
       (estadoRaw ?? []).forEach((row) => {
         const f = (row as any).fecha_vencimiento ?? null;
-        if (!f || f > en7Str) cBueno++;
-        else if (f < hoyStr) cVencido++;
-        else cPorVencer++;
+        const estado = (row as any).estados?.nombre;
+        const estadoId = (row as any).estado_id;
+        // Solo excluir si es Dañado (estado_id = 3)
+        const esDanano = estadoId === 3 || (estado && estado.toLowerCase().includes("dañado"));
+        
+        // Excluir dañados
+        if (esDanano) return;
+        
+        // Normalizar fecha a formato YYYY-MM-DD
+        let fechaNorm = "";
+        if (f) {
+          if (typeof f === 'string') {
+            fechaNorm = f.split('T')[0];
+          } else {
+            const d = new Date(f);
+            const año = d.getFullYear();
+            const mes = String(d.getMonth() + 1).padStart(2, '0');
+            const día = String(d.getDate()).padStart(2, '0');
+            fechaNorm = `${año}-${mes}-${día}`;
+          }
+        }
+        
+        // Comparación de fechas normalizadas
+        if (!fechaNorm) {
+          cBueno++;
+        } else if (fechaNorm < hoyStr) {
+          // Si fecha < hoy (ya pasó), está vencido
+          cVencido++;
+        } else if (fechaNorm <= en7Str) {
+          // Si fecha está entre hoy y en 7 días
+          cPorVencer++;
+        } else {
+          // Si fecha es mayor a en7Str, está bueno
+          cBueno++;
+        }
       });
       const estadosCalc: EstadoData[] = [];
       if (cVencido > 0)   estadosCalc.push({ nombre: "Vencido",    value: cVencido,   color: "#CC1717", valor: "vencido"    });
@@ -238,7 +299,7 @@ export default function Dashboard() {
       valor: kpi.porVencer,
       desc: "alimentos próximos a vencer",
       icon: AlertTriangle,
-      href: "/alimentos?filtro=por_vencer",
+      href: "/stock",
       color: kpi.porVencer > 0 ? "text-amber-600" : "text-emerald-600",
       bg: kpi.porVencer > 0 ? "bg-amber-50" : "bg-emerald-50",
     },
@@ -482,7 +543,7 @@ export default function Dashboard() {
                 </CardTitle>
               </div>
               <Link
-                href="/alimentos?filtro=por_vencer"
+                href="/stock"
                 className="text-xs font-medium text-amber-700 hover:text-amber-900 flex items-center gap-1 transition-colors"
               >
                 Ver todos <ArrowUpRight className="h-3 w-3" />
@@ -506,7 +567,7 @@ export default function Dashboard() {
                       <td className="py-2.5 pl-6 pr-4 font-medium text-foreground">{v.nombre}</td>
                       <td className="py-2.5 px-4 text-muted-foreground">{v.cantidad}</td>
                       <td className="py-2.5 px-4 text-muted-foreground">
-                        {new Date(v.fecha_vencimiento).toLocaleDateString("es", { day: "numeric", month: "short", year: "numeric" })}
+                        {formatearFechaDirecta(v.fecha_vencimiento)}
                       </td>
                       <td className="py-2.5 pl-4 pr-6">
                         <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${badgeColor(v.diasRestantes)}`}>

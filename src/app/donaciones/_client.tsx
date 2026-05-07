@@ -20,6 +20,15 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Filter, X, AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
+import { getHoyLocal, getFechaFuturaLocal } from "@/lib/utils";
+
+// Formatear fecha directamente del string sin conversión de timezone
+function formatearFechaDirecta(fechaStr: string | null): string {
+  if (!fechaStr) return "—";
+  const [año, mes, día] = fechaStr.split('T')[0].split('-').map(Number);
+  const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  return `${día} ${meses[mes - 1]} ${año}`;
+}
 
 type Donante = Database["public"]["Tables"]["donantes"]["Row"];
 type Alimento = Database["public"]["Tables"]["alimentos"]["Row"];
@@ -59,13 +68,42 @@ interface DonacionConDetalle {
   detalle_donacion: DetalleConAlimento[];
 }
 
-const hoy = new Date().toISOString().slice(0, 10);
-const en7 = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+const hoy = getHoyLocal();
+const en7 = getFechaFuturaLocal(7);
+
+function calcularPorcentajeProductos(donacion: DonacionConDetalle) {
+  const detalles = donacion.detalle_donacion;
+  if (detalles.length === 0) return { buenos: 0, malos: 0 };
+  
+  let totalBueno = 0;
+  let totalMalo = 0;
+  
+  detalles.forEach((d) => {
+    const fecha = d.fecha_vencimiento ?? null;
+    const estado = d.estados?.nombre;
+    
+    // Determinar si está vencido o dañado
+    const esVencido = estado === "Caducado" || (fecha && fecha < hoy);
+    const esDanado = estado && estado.toLowerCase() === "dañado";
+    
+    if (esVencido || esDanado) {
+      totalMalo += d.cantidad;
+    } else {
+      totalBueno += d.cantidad;
+    }
+  });
+  
+  const totalProductos = totalBueno + totalMalo;
+  const porcentajeBueno = totalProductos > 0 ? Math.round((totalBueno / totalProductos) * 100) : 0;
+  const porcentajeMalo = totalProductos > 0 ? Math.round((totalMalo / totalProductos) * 100) : 0;
+  
+  return { buenos: porcentajeBueno, malos: porcentajeMalo, totalBueno, totalMalo };
+}
 
 function badgeVencimiento(fecha: string | null, estado: { nombre: string } | null) {
   if (!fecha) return null;
-  const hoy = new Date().toISOString().slice(0, 10);
-  const en7 = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+  const hoy = getHoyLocal();
+  const en7 = getFechaFuturaLocal(7);
   
   if (estado?.nombre === "Caducado") return { label: "Caducado", cls: "bg-red-100 text-red-700" };
   if (fecha < hoy) return { label: "Vencido", cls: "bg-red-100 text-red-700" };
@@ -75,8 +113,8 @@ function badgeVencimiento(fecha: string | null, estado: { nombre: string } | nul
 
 function DonacionRow({ donacion }: { donacion: DonacionConDetalle }) {
   const [abierto, setAbierto] = useState(false);
-  const hoy = new Date().toISOString().slice(0, 10);
-  const en7 = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+  const hoy = getHoyLocal();
+  const en7 = getFechaFuturaLocal(7);
   
   const tieneAlertaVenc = donacion.detalle_donacion.some((d) => {
     const f = d.fecha_vencimiento ?? null;
@@ -95,19 +133,40 @@ function DonacionRow({ donacion }: { donacion: DonacionConDetalle }) {
         </td>
         <td className="py-3 px-4 font-medium">{donacion.donantes?.nombre ?? "—"}</td>
         <td className="py-3 px-4 text-muted-foreground">
-          {new Date(donacion.fecha_donacion).toLocaleDateString("es", {
-            year: "numeric", month: "long", day: "numeric",
-          })}
+          {(() => {
+            const [año, mes, día] = donacion.fecha_donacion.split('T')[0].split('-').map(Number);
+            const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+            return `${día} de ${meses[mes - 1]} de ${año}`;
+          })()}
         </td>
         <td className="py-3 px-4">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">
-              {donacion.detalle_donacion.length} producto{donacion.detalle_donacion.length !== 1 ? "s" : ""}
-            </span>
-            {tieneAlertaVenc && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">
-                <AlertTriangle className="h-2.5 w-2.5" /> Vencido
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                {donacion.detalle_donacion.length} producto{donacion.detalle_donacion.length !== 1 ? "s" : ""}
               </span>
+              {tieneAlertaVenc && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">
+                  <AlertTriangle className="h-2.5 w-2.5" /> Vencido
+                </span>
+              )}
+            </div>
+            {donacion.detalle_donacion.length > 0 && (
+              (() => {
+                const stats = calcularPorcentajeProductos(donacion);
+                return (
+                  <div className="flex gap-2 text-[11px]">
+                    <span className="inline-flex items-center gap-1">
+                      <div className="h-1.5 w-1.5 bg-green-500 rounded-full"></div>
+                      <span className="text-green-700 font-semibold">{stats.buenos}%</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <div className="h-1.5 w-1.5 bg-red-500 rounded-full"></div>
+                      <span className="text-red-700 font-semibold">{stats.malos}%</span>
+                    </span>
+                  </div>
+                );
+              })()
             )}
           </div>
         </td>
@@ -151,13 +210,7 @@ function DonacionRow({ donacion }: { donacion: DonacionConDetalle }) {
                             )}
                           </td>
                           <td className="py-2.5 px-3 text-muted-foreground">
-                            {d.fecha_vencimiento ? (
-                              new Date(d.fecha_vencimiento).toLocaleDateString("es", {
-                                day: "numeric", month: "short", year: "numeric",
-                              })
-                            ) : (
-                              <span>Sin fecha</span>
-                            )}
+                            {formatearFechaDirecta(d.fecha_vencimiento)}
                           </td>
                           <td className="py-2.5 pl-3 pr-4">
                             {d.estados?.nombre ? (
@@ -174,6 +227,31 @@ function DonacionRow({ donacion }: { donacion: DonacionConDetalle }) {
                   )}
                 </tbody>
               </table>
+              
+              {donacion.detalle_donacion.length > 0 && (
+                <div className="bg-muted/20 px-4 py-3 border-t">
+                  {(() => {
+                    const stats = calcularPorcentajeProductos(donacion);
+                    return (
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-1">
+                          <p className="text-xs font-semibold text-foreground">Resumen de estado</p>
+                          <div className="flex gap-4">
+                            <div className="flex items-center gap-2">
+                              <div className="h-2 w-8 bg-green-500 rounded"></div>
+                              <span className="text-xs text-muted-foreground">Productos buenos: <span className="font-semibold text-green-700">{stats.buenos}%</span> ({stats.totalBueno})</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="h-2 w-8 bg-red-500 rounded"></div>
+                              <span className="text-xs text-muted-foreground">Vencidos/Dañados: <span className="font-semibold text-red-700">{stats.malos}%</span> ({stats.totalMalo})</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
             </div>
           </td>
         </tr>
@@ -199,9 +277,13 @@ function DonacionesContent() {
   const [donaciones, setDonaciones] = useState<DonacionConDetalle[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [busquedaAlimento, setBusquedaAlimento] = useState<{[key: number]: string}>({});
+  const [categorias, setCategorias] = useState<Database["public"]["Tables"]["categorias"]["Row"][]>([]);
+  const [unidades, setUnidades] = useState<UnidadMedida[]>([]);
+  const [dialogNuevoProducto, setDialogNuevoProducto] = useState(false);
+  const [nuevoProducto, setNuevoProducto] = useState({nombre: "", categoria_id: "", cantidad: "", unidad_medida_id: ""});
 
   async function cargarDatos() {
-    const [{ data: don }, { data: ali }, { data: est }, { data: donac }] = await Promise.all([
+    const [{ data: don }, { data: ali }, { data: est }, { data: donac }, { data: cat }, { data: uni }] = await Promise.all([
       supabase.from("donantes").select("*").order("nombre"),
       supabase.from("alimentos").select("id, nombre, cantidad, unidad_medida_id, categorias(id, nombre), unidades_medida(nombre)").order("nombre"),
       supabase.from("estados").select("*").order("nombre"),
@@ -221,10 +303,14 @@ function DonacionesContent() {
           )
         `)
         .order("id", { ascending: false }),
+      supabase.from("categorias").select("*").order("nombre"),
+      supabase.from("unidades_medida").select("*").order("nombre"),
     ]);
     setDonantes(don ?? []);
     setAlimentos((ali as unknown as AlimentoConUnidad[]) ?? []);
     setEstados(est ?? []);
+    setCategorias(cat ?? []);
+    setUnidades(uni ?? []);
     setDonaciones((donac as unknown as DonacionConDetalle[]) ?? []);
     setLoading(false);
   }
@@ -245,7 +331,7 @@ function DonacionesContent() {
 
   function obtenerEstadoAutomatico(fecha_vencimiento: string | null): number | null {
     if (!fecha_vencimiento) return null;
-    const hoy = new Date().toISOString().slice(0, 10);
+    const hoy = getHoyLocal();
     if (fecha_vencimiento <= hoy) {
       // Buscar estado "Caducado"
       const estadoCaducado = estados.find(e => e.nombre.toLowerCase() === "caducado");
@@ -256,8 +342,39 @@ function DonacionesContent() {
 
   function esEstadoNoEditable(fecha_vencimiento: string | null): boolean {
     if (!fecha_vencimiento) return false;
-    const hoy = new Date().toISOString().slice(0, 10);
+    const hoy = getHoyLocal();
     return fecha_vencimiento <= hoy;
+  }
+
+  async function crearNuevoProducto(e: React.FormEvent) {
+    e.preventDefault();
+    if (!nuevoProducto.nombre.trim()) return;
+    if (!nuevoProducto.cantidad || Number(nuevoProducto.cantidad) <= 0) return;
+    
+    try {
+      const { data: nuevoAli, error } = await supabase.from("alimentos").insert({
+        nombre: nuevoProducto.nombre,
+        categoria_id: nuevoProducto.categoria_id ? Number(nuevoProducto.categoria_id) : null,
+        cantidad: Number(nuevoProducto.cantidad),
+        unidad_medida_id: nuevoProducto.unidad_medida_id ? Number(nuevoProducto.unidad_medida_id) : null,
+      }).select().single();
+      
+      if (error) {
+        console.error("Error al registrar producto:", error);
+        return;
+      }
+      
+      if (nuevoAli) {
+        // Recargar alimentos desde la BD para asegurar sincronización
+        const { data: ali } = await supabase.from("alimentos").select("id, nombre, cantidad, unidad_medida_id, categorias(id, nombre), unidades_medida(nombre)").order("nombre");
+        setAlimentos((ali as unknown as AlimentoConUnidad[]) ?? []);
+        
+        setNuevoProducto({nombre: "", categoria_id: "", cantidad: "", unidad_medida_id: ""});
+        setDialogNuevoProducto(false);
+      }
+    } catch (err) {
+      console.error("Error inesperado:", err);
+    }
   }
 
   async function registrarDonacion(e: React.FormEvent) {
@@ -319,7 +436,11 @@ function DonacionesContent() {
     filtroUrl === "donante" && filtroId
       ? `Donante: ${donantes.find((d) => d.id === filtroId)?.nombre ?? filtroId}`
       : filtroUrl === "mes" && filtroFecha
-      ? `Mes: ${new Date(filtroFecha + "-01").toLocaleDateString("es", { month: "long", year: "numeric" })}`
+      ? `Mes: ${(() => {
+          const [año, mes] = filtroFecha.split('-').map(Number);
+          const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+          return `${meses[mes - 1]} de ${año}`;
+        })()}`
       : filtroUrl === "mes"
       ? "Donaciones de este mes"
       : filtroUrl === "estado" && filtroValor
@@ -364,9 +485,14 @@ function DonacionesContent() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <Label>Alimentos donados</Label>
-                  <Button type="button" variant="outline" size="sm" onClick={agregarDetalle}>
-                    + Agregar
-                  </Button>
+                  <div className="flex flex-col gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => setDialogNuevoProducto(true)}>
+                      + Registrar nuevo producto
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={agregarDetalle}>
+                      + Agregar donación
+                    </Button>
+                  </div>
                 </div>
                 <div className="max-h-96 space-y-3 overflow-y-auto">
                   {detalles.map((detalle, i) => {
@@ -493,6 +619,68 @@ function DonacionesContent() {
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
                 <Button type="submit">Registrar</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={dialogNuevoProducto} onOpenChange={setDialogNuevoProducto}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Registrar nuevo producto</DialogTitle>
+              <DialogDescription>Agrega un nuevo producto al inventario</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={crearNuevoProducto} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="np-nombre">Nombre del producto *</Label>
+                <Input
+                  id="np-nombre"
+                  placeholder="Ej: Arroz integral"
+                  value={nuevoProducto.nombre}
+                  onChange={(e) => setNuevoProducto({...nuevoProducto, nombre: e.target.value})}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="np-categoria">Categoría</Label>
+                <Select value={nuevoProducto.categoria_id} onValueChange={(v) => setNuevoProducto({...nuevoProducto, categoria_id: v})}>
+                  <SelectTrigger id="np-categoria">
+                    <SelectValue placeholder="Seleccionar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categorias.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.nombre}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="np-cantidad">Cantidad *</Label>
+                  <Input
+                    id="np-cantidad"
+                    type="number"
+                    placeholder="Ej: 10"
+                    value={nuevoProducto.cantidad}
+                    onChange={(e) => setNuevoProducto({...nuevoProducto, cantidad: e.target.value})}
+                    min="0"
+                    step="0.01"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="np-unidad">Unidad de medida</Label>
+                  <Select value={nuevoProducto.unidad_medida_id} onValueChange={(v) => setNuevoProducto({...nuevoProducto, unidad_medida_id: v})}>
+                    <SelectTrigger id="np-unidad">
+                      <SelectValue placeholder="Seleccionar" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {unidades.map(u => <SelectItem key={u.id} value={String(u.id)}>{u.nombre}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter className="gap-2">
+                <Button type="button" variant="outline" onClick={() => setDialogNuevoProducto(false)}>Cancelar</Button>
+                <Button type="submit">Registrar producto</Button>
               </DialogFooter>
             </form>
           </DialogContent>

@@ -67,11 +67,15 @@ export default function DonantesClient() {
 
   async function agregarDonante(e: React.FormEvent) {
     e.preventDefault();
+    if (!nombre.trim() || !ci.trim()) {
+      alert("Por favor completa el nombre y CI/NIT/DNI");
+      return;
+    }
     await supabase.from("donantes").insert({
       nombre,
       razon_social: razonSocial || null,
       numero_contacto: numeroContacto || null,
-      ci: ci || null,
+      ci,
     });
     setNombre("");
     setRazonSocial("");
@@ -105,11 +109,15 @@ export default function DonantesClient() {
 
   async function guardarEdicion() {
     if (!editandoId) return;
+    if (!editNombre.trim() || !editCi.trim()) {
+      alert("Por favor completa el nombre y CI/NIT/DNI");
+      return;
+    }
     await supabase.from("donantes").update({
       nombre: editNombre,
       razon_social: editRazonSocial || null,
       numero_contacto: editNumeroContacto || null,
-      ci: editCi || null,
+      ci: editCi,
     }).eq("id", editandoId);
     cerrarEdicion();
     cargarDonantes();
@@ -174,12 +182,13 @@ export default function DonantesClient() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="ci">CI</Label>
+                  <Label htmlFor="ci">CI/NIT/DNI *</Label>
                   <Input
                     id="ci"
                     value={ci}
                     onChange={(e) => setCi(e.target.value)}
                     placeholder="Cédula de identidad"
+                    required
                   />
                 </div>
               </div>

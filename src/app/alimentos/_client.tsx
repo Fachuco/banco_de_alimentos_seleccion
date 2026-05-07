@@ -217,9 +217,9 @@ function AlimentosContent() {
                 <div className="space-y-2">
                   <Label>Cantidad *</Label>
                   <Input
-                    type="number" min={1} value={cantidad}
+                    type="number" min={0} step={0.01} value={cantidad}
                     onChange={(e) => setCantidad(e.target.value)}
-                    placeholder="Ej: 10" required
+                    placeholder="Ej: 10.5" required
                   />
                 </div>
                 <div className="space-y-2">
@@ -400,9 +400,9 @@ function AlimentosContent() {
                                     <div className="space-y-2">
                                       <Label>Cantidad *</Label>
                                       <Input
-                                        type="number" min={1} value={editCantidad}
+                                        type="number" min={0} step={0.01} value={editCantidad}
                                         onChange={(e) => setEditCantidad(e.target.value)}
-                                        placeholder="Ej: 10" required
+                                        placeholder="Ej: 10.5" required
                                       />
                                     </div>
                                     <div className="space-y-2">
